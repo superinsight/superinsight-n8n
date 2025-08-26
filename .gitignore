@@ -16,6 +16,10 @@ credentials/
 **/secrets/
 **/credentials/
 
+# Allow Terraform secrets module
+!terraform/modules/secrets/
+!**/terraform/modules/secrets/
+
 # IDE
 .vscode/
 .idea/
