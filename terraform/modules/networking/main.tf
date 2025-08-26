@@ -107,7 +107,7 @@ resource "aws_route_table" "public" {
 
 # Route Tables for Private Subnets
 resource "aws_route_table" "private" {
-  count = length(var.availability_zones)
+  count = min(2, length(var.availability_zones))
 
   vpc_id = aws_vpc.main.id
 
