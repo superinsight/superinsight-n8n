@@ -4,8 +4,8 @@ output "db_instance_id" {
 }
 
 output "db_endpoint" {
-  description = "RDS instance endpoint"
-  value       = aws_db_instance.main.endpoint
+  description = "RDS instance endpoint (hostname only)"
+  value       = split(":", aws_db_instance.main.endpoint)[0]
   sensitive   = true
 }
 
