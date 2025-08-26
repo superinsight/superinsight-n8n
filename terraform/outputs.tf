@@ -112,12 +112,12 @@ output "estimated_monthly_cost" {
   value = {
     ecs_fargate     = "~$120-200 (2 tasks, 2 vCPU, 4GB each)"
     rds_postgres    = "~$60-90 (db.t3.medium)"
-    alb            = "~$20"
-    s3_storage     = "~$10-30"
-    cloudwatch     = "~$10-20"
+    alb             = "~$20"
+    s3_storage      = "~$10-30"
+    cloudwatch      = "~$10-20"
     secrets_manager = "~$2"
-    data_transfer  = "~$20-50"
-    total_estimate = "~$240-410/month"
+    data_transfer   = "~$20-50"
+    total_estimate  = "~$240-410/month"
   }
 }
 

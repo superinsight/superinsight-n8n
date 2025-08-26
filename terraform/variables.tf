@@ -9,13 +9,19 @@
 variable "aws_region" {
   description = "AWS region to deploy resources"
   type        = string
-  default     = "ap-northeast-1"
+  default     = "us-west-2"
 }
 
 variable "environment" {
   description = "Environment name (dev, staging, production)"
   type        = string
   default     = "production"
+}
+
+variable "aws_account_id" {
+  description = "AWS Account ID for resource tagging and validation"
+  type        = string
+  default     = "465636789521"
 }
 
 # ============================================================================
