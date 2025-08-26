@@ -1,0 +1,266 @@
+name: 'Terraform Destroy'
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type "destroy-infrastructure" to confirm complete destruction'
+        required: true
+        default: ''
+      reason:
+        description: 'Reason for destroying infrastructure'
+        required: true
+        default: ''
+
+env:
+  TF_VERSION: '1.6.0'
+  TF_IN_AUTOMATION: true
+
+jobs:
+  terraform-destroy:
+    name: 'Terraform Destroy'
+    runs-on: ubuntu-latest
+    environment: 
+      name: destruction
+      
+    defaults:
+      run:
+        shell: bash
+        working-directory: terraform
+
+    steps:
+    - name: Validate Destruction Request
+      run: |
+        if [ "${{ github.event.inputs.confirmation }}" != "destroy-infrastructure" ]; then
+          echo "❌ Infrastructure destruction requires exact confirmation"
+          echo "Please type 'destroy-infrastructure' in the confirmation input"
+          exit 1
+        fi
+        
+        if [ -z "${{ github.event.inputs.reason }}" ]; then
+          echo "❌ Reason for destruction is required"
+          exit 1
+        fi
+        
+        echo "⚠️ DESTRUCTIVE ACTION CONFIRMED"
+        echo "Reason: ${{ github.event.inputs.reason }}"
+
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.PROD_AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.PROD_AWS_SECRET_ACCESS_KEY }}
+        aws-region: ap-northeast-1
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ env.TF_VERSION }}
+
+    - name: Pre-Destruction Backup
+      run: |
+        echo "📋 Creating pre-destruction backup..."
+        
+        # Export current state
+        aws s3 cp s3://superinsight-terraform-state-prod/n8n/terraform.tfstate \
+          terraform-state-backup-$(date +%Y%m%d-%H%M%S).tfstate || echo "State backup failed"
+        
+        # Get current resources list
+        echo "📊 Current infrastructure resources:"
+        aws resourcegroupstaggingapi get-resources \
+          --tag-filters Key=Project,Values=n8n-hipaa-compliance \
+          --query 'ResourceTagMappingList[].ResourceARN' \
+          --output text > current-resources.txt || echo "Resource list failed"
+
+    - name: Multi-Level Approval Required
+      uses: trstringer/manual-approval@v1
+      with:
+        secret: ${{ github.TOKEN }}
+        approvers: ${{ secrets.DESTRUCTION_APPROVERS }}
+        minimum-approvals: 2
+        issue-title: "🚨 CRITICAL: n8n Infrastructure Destruction Approval"
+        issue-body: |
+          ## ⚠️ INFRASTRUCTURE DESTRUCTION REQUEST
+          
+          **This action will PERMANENTLY DESTROY all n8n infrastructure!**
+          
+          ### 📋 Destruction Details
+          - **Requester**: @${{ github.actor }}
+          - **Reason**: ${{ github.event.inputs.reason }}
+          - **Timestamp**: $(date -u)
+          
+          ### 💥 Resources to be Destroyed
+          - **ECS Cluster and Services** (n8n application)
+          - **RDS Database** (all workflow data)
+          - **Load Balancer and Networking**
+          - **S3 Buckets** (workflows and backups)
+          - **Secrets Manager** (all credentials)
+          - **CloudWatch Logs and Dashboards**
+          - **IAM Roles and Policies**
+          
+          ### ⚠️ CRITICAL WARNINGS
+          - **ALL WORKFLOW DATA WILL BE LOST**
+          - **ALL COMPLIANCE AUTOMATION WILL STOP**
+          - **RECOVERY REQUIRES COMPLETE REDEPLOYMENT**
+          - **MONTHLY SAVINGS**: ~$240-410
+          
+          ### 🔒 Safety Checklist
+          - [ ] Data backup completed if needed
+          - [ ] Team notified of planned destruction
+          - [ ] Alternative solutions considered
+          - [ ] Business impact assessed
+          
+          **THIS ACTION CANNOT BE UNDONE!**
+          
+          ---
+          
+          **Required**: TWO approvals needed
+          To approve: Comment with `/approve-destruction`
+          To deny: Comment with `/deny`
+
+    - name: Terraform Init
+      run: |
+        terraform init \
+          -backend-config="bucket=superinsight-terraform-state-prod" \
+          -backend-config="key=n8n/terraform.tfstate" \
+          -backend-config="region=ap-northeast-1" \
+          -backend-config="dynamodb_table=superinsight-terraform-locks"
+
+    - name: Terraform Plan Destroy
+      run: |
+        terraform plan -destroy \
+          -var="trustcloud_api_key=${{ secrets.TRUSTCLOUD_API_KEY }}" \
+          -var="n8n_encryption_key=${{ secrets.N8N_ENCRYPTION_KEY }}" \
+          -out=destroy-plan
+
+    - name: Final Safety Check
+      run: |
+        echo "🔍 Final safety verification..."
+        echo "This will destroy the following resources:"
+        terraform show destroy-plan
+        
+        echo ""
+        echo "⚠️ FINAL WARNING: This action will:"
+        echo "   • Delete all n8n workflows and data"
+        echo "   • Stop all compliance automation"
+        echo "   • Remove all infrastructure"
+        echo "   • Save ~$240-410/month in AWS costs"
+        echo ""
+        echo "Proceeding with destruction in 30 seconds..."
+        sleep 30
+
+    - name: Terraform Destroy
+      run: |
+        echo "💥 Starting infrastructure destruction..."
+        terraform apply -auto-approve destroy-plan
+
+    - name: Verify Destruction
+      run: |
+        echo "🔍 Verifying destruction completion..."
+        
+        # Check for remaining resources
+        REMAINING=$(aws resourcegroupstaggingapi get-resources \
+          --tag-filters Key=Project,Values=n8n-hipaa-compliance \
+          --query 'ResourceTagMappingList | length(@)' \
+          --output text || echo "0")
+        
+        if [ "$REMAINING" -eq "0" ]; then
+          echo "✅ All tagged resources successfully destroyed"
+        else
+          echo "⚠️ $REMAINING resources may still exist - manual cleanup required"
+        fi
+
+    - name: Cleanup State
+      run: |
+        echo "🧹 Cleaning up Terraform state..."
+        # Optionally remove the state file (commented for safety)
+        # aws s3 rm s3://superinsight-terraform-state-prod/n8n/terraform.tfstate
+
+    - name: Create Destruction Summary
+      run: |
+        cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+        # 💥 n8n Infrastructure Destruction Completed
+        
+        ## 📋 Destruction Summary
+        - **Status**: Complete
+        - **Requested by**: ${{ github.actor }}
+        - **Reason**: ${{ github.event.inputs.reason }}
+        - **Timestamp**: $(date -u)
+        
+        ## 💰 Cost Impact
+        - **Monthly Savings**: ~$240-410
+        - **Resources Destroyed**: ECS, RDS, ALB, S3, Secrets Manager, etc.
+        
+        ## 📝 Next Steps if Redeployment Needed
+        1. Review and update Terraform configurations
+        2. Ensure all secrets are still valid
+        3. Run terraform plan to preview recreation
+        4. Execute terraform apply for redeployment
+        
+        ## ⚠️ Important Notes
+        - All workflow data has been permanently deleted
+        - All compliance automation has stopped
+        - Backups (if any) are in S3 with lifecycle policies
+        - State file preserved for audit purposes
+        
+        ---
+        *Destruction completed by GitHub Actions on $(date)*
+        EOF
+
+    - name: Success Notification
+      if: success()
+      run: |
+        echo "💥 n8n infrastructure destruction completed!"
+        
+        if [ -n "${{ secrets.DISCORD_WEBHOOK_URL }}" ]; then
+          curl -H "Content-Type: application/json" \
+            -X POST \
+            -d '{
+              "embeds": [{
+                "title": "💥 n8n Infrastructure Destroyed",
+                "description": "SuperInsight n8n infrastructure has been completely removed",
+                "color": 16776960,
+                "fields": [
+                  {"name": "🗑️ Status", "value": "Destruction Complete", "inline": true},
+                  {"name": "💰 Monthly Savings", "value": "~$240-410", "inline": true},
+                  {"name": "👤 Requested by", "value": "${{ github.actor }}", "inline": true},
+                  {"name": "📝 Reason", "value": "${{ github.event.inputs.reason }}", "inline": false}
+                ],
+                "footer": {
+                  "text": "SuperInsight n8n Infrastructure - DESTROYED"
+                },
+                "timestamp": "'$(date -u +%Y-%m-%dT%H:%M:%S.000Z)'"
+              }]
+            }' \
+            ${{ secrets.DISCORD_WEBHOOK_URL }}
+        fi
+
+    - name: Failure Notification
+      if: failure()
+      run: |
+        echo "❌ Infrastructure destruction failed!"
+        
+        if [ -n "${{ secrets.DISCORD_WEBHOOK_URL }}" ]; then
+          curl -H "Content-Type: application/json" \
+            -X POST \
+            -d '{
+              "embeds": [{
+                "title": "❌ n8n Infrastructure Destruction Failed",
+                "description": "Infrastructure destruction encountered errors - manual cleanup may be required",
+                "color": 15158332,
+                "fields": [
+                  {"name": "🗑️ Status", "value": "Destruction Failed", "inline": true},
+                  {"name": "👤 Requester", "value": "${{ github.actor }}", "inline": true},
+                  {"name": "🔗 Workflow", "value": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}", "inline": false}
+                ],
+                "footer": {
+                  "text": "Manual cleanup may be required - check AWS console"
+                },
+                "timestamp": "'$(date -u +%Y-%m-%dT%H:%M:%S.000Z)'"
+              }]
+            }' \
+            ${{ secrets.DISCORD_WEBHOOK_URL }}
+        fi

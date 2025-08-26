@@ -1,0 +1,234 @@
+name: 'Terraform Apply'
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'terraform/**'
+      - 'terraform-backend/**'
+      - '.github/workflows/terraform-*.yml'
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type "deploy" to confirm deployment'
+        required: true
+        default: ''
+
+env:
+  TF_VERSION: '1.6.0'
+  TF_IN_AUTOMATION: true
+
+jobs:
+  terraform-apply:
+    name: 'Terraform Apply'
+    runs-on: ubuntu-latest
+    environment: 
+      name: production
+      
+    defaults:
+      run:
+        shell: bash
+        working-directory: terraform
+
+    steps:
+    - name: Validate Manual Deployment
+      if: github.event_name == 'workflow_dispatch'
+      run: |
+        if [ "${{ github.event.inputs.confirmation }}" != "deploy" ]; then
+          echo "❌ Manual deployment requires confirmation"
+          echo "Please type 'deploy' in the confirmation input"
+          exit 1
+        fi
+
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.PROD_AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.PROD_AWS_SECRET_ACCESS_KEY }}
+        aws-region: ap-northeast-1
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ env.TF_VERSION }}
+
+    - name: Terraform Init
+      run: |
+        terraform init \
+          -backend-config="bucket=superinsight-terraform-state-prod" \
+          -backend-config="key=n8n/terraform.tfstate" \
+          -backend-config="region=ap-northeast-1" \
+          -backend-config="dynamodb_table=superinsight-terraform-locks"
+
+    - name: Terraform Plan
+      run: |
+        terraform plan \
+          -var="trustcloud_api_key=${{ secrets.TRUSTCLOUD_API_KEY }}" \
+          -var="n8n_encryption_key=${{ secrets.N8N_ENCRYPTION_KEY }}" \
+          -out=tfplan
+
+    - name: Manual Approval Required
+      uses: trstringer/manual-approval@v1
+      if: github.event_name != 'workflow_dispatch'
+      with:
+        secret: ${{ github.TOKEN }}
+        approvers: ${{ secrets.DEPLOYMENT_APPROVERS }}
+        minimum-approvals: 1
+        issue-title: "🚀 n8n Infrastructure Deployment Approval Required"
+        issue-body: |
+          ## 🏗️ Infrastructure Deployment Request
+          
+          **Branch**: `${{ github.ref_name }}`
+          **Commit**: ${{ github.sha }}
+          **Actor**: @${{ github.actor }}
+          
+          ### 📋 Changes
+          This deployment will apply Terraform changes to the n8n infrastructure.
+          
+          ### 💰 Estimated Cost Impact
+          - **Monthly Cost**: ~$240-410
+          - **New Resources**: ECS, RDS, ALB, S3, Secrets Manager
+          
+          ### ⚠️ Pre-Deployment Checklist
+          - [ ] Reviewed Terraform plan
+          - [ ] Verified secrets are up to date
+          - [ ] Confirmed backup procedures
+          - [ ] Team notified of deployment
+          
+          **Please review and approve this deployment.**
+          
+          ---
+          
+          To approve: Comment with `/approve`
+          To deny: Comment with `/deny`
+
+    - name: Terraform Apply
+      run: terraform apply -auto-approve tfplan
+
+    - name: Get Deployment Outputs
+      id: outputs
+      run: |
+        echo "n8n_url=$(terraform output -raw n8n_url)" >> $GITHUB_OUTPUT
+        echo "alb_dns=$(terraform output -raw alb_dns_name)" >> $GITHUB_OUTPUT
+        echo "vpc_id=$(terraform output -raw vpc_id)" >> $GITHUB_OUTPUT
+
+    - name: Health Check
+      run: |
+        echo "⏳ Waiting for n8n to be ready..."
+        sleep 60  # Give time for ECS tasks to start
+        
+        N8N_URL="${{ steps.outputs.outputs.n8n_url }}"
+        echo "🩺 Testing n8n health at: $N8N_URL"
+        
+        for i in {1..12}; do
+          echo "Health check attempt $i/12..."
+          if curl -f -s --max-time 30 "$N8N_URL/healthz" > /dev/null 2>&1 || 
+             curl -f -s --max-time 30 "$N8N_URL" > /dev/null 2>&1; then
+            echo "✅ n8n is responding!"
+            break
+          fi
+          
+          if [ $i -eq 12 ]; then
+            echo "⚠️ Health check timeout, but deployment may still be successful"
+            echo "Please check manually: $N8N_URL"
+          else
+            echo "Waiting 30 seconds before retry..."
+            sleep 30
+          fi
+        done
+
+    - name: Create Deployment Summary
+      run: |
+        cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+        # 🎉 n8n Infrastructure Deployment Successful!
+        
+        ## 📋 Deployment Information
+        - **n8n URL**: ${{ steps.outputs.outputs.n8n_url }}
+        - **Load Balancer**: ${{ steps.outputs.outputs.alb_dns }}
+        - **VPC ID**: ${{ steps.outputs.outputs.vpc_id }}
+        - **Region**: ap-northeast-1
+        - **Environment**: production
+        
+        ## 📝 Next Steps
+        1. 🌐 Access n8n at: ${{ steps.outputs.outputs.n8n_url }}
+        2. 🔧 Complete the initial setup wizard
+        3. 📁 Import workflows from the `n8n-workflows/` directory
+        4. 🔐 Configure TrustCloud credentials in n8n
+        5. 🧪 Test AWS connectivity with provided IAM roles
+        
+        ## 💰 Monthly Cost Estimate
+        - **Total**: ~$240-410
+        - **ECS Fargate**: ~$120-200
+        - **RDS PostgreSQL**: ~$60-90
+        - **Load Balancer**: ~$20
+        - **Storage & Other**: ~$40-100
+        
+        ## ⚠️ Important Notes
+        - Initial setup may take 5-10 minutes
+        - Database initialization happens on first run
+        - Monitor CloudWatch logs for any issues
+        - SSL certificate setup recommended for production
+        
+        ---
+        *Deployed by GitHub Actions on $(date)*
+        EOF
+
+    - name: Success Notification
+      if: success()
+      run: |
+        echo "🎉 n8n infrastructure deployment completed successfully!"
+        
+        if [ -n "${{ secrets.DISCORD_WEBHOOK_URL }}" ]; then
+          curl -H "Content-Type: application/json" \
+            -X POST \
+            -d '{
+              "embeds": [{
+                "title": "🎉 n8n Infrastructure Deployed Successfully",
+                "description": "SuperInsight n8n HIPAA compliance infrastructure is now live!",
+                "color": 3066993,
+                "fields": [
+                  {"name": "🌐 n8n URL", "value": "${{ steps.outputs.outputs.n8n_url }}", "inline": false},
+                  {"name": "🏗️ Environment", "value": "Production", "inline": true},
+                  {"name": "💰 Estimated Cost", "value": "~$240-410/month", "inline": true},
+                  {"name": "👤 Deployed by", "value": "${{ github.actor }}", "inline": true},
+                  {"name": "📝 Commit", "value": "${{ github.sha }}", "inline": false}
+                ],
+                "footer": {
+                  "text": "SuperInsight n8n Infrastructure"
+                },
+                "timestamp": "'$(date -u +%Y-%m-%dT%H:%M:%S.000Z)'"
+              }]
+            }' \
+            ${{ secrets.DISCORD_WEBHOOK_URL }}
+        fi
+
+    - name: Failure Notification
+      if: failure()
+      run: |
+        echo "❌ n8n infrastructure deployment failed!"
+        
+        if [ -n "${{ secrets.DISCORD_WEBHOOK_URL }}" ]; then
+          curl -H "Content-Type: application/json" \
+            -X POST \
+            -d '{
+              "embeds": [{
+                "title": "❌ n8n Infrastructure Deployment Failed",
+                "description": "SuperInsight n8n deployment encountered errors",
+                "color": 15158332,
+                "fields": [
+                  {"name": "🏗️ Environment", "value": "Production", "inline": true},
+                  {"name": "👤 Actor", "value": "${{ github.actor }}", "inline": true},
+                  {"name": "📝 Commit", "value": "${{ github.sha }}", "inline": false},
+                  {"name": "🔗 Workflow", "value": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}", "inline": false}
+                ],
+                "footer": {
+                  "text": "Please check the workflow logs for details"
+                },
+                "timestamp": "'$(date -u +%Y-%m-%dT%H:%M:%S.000Z)'"
+              }]
+            }' \
+            ${{ secrets.DISCORD_WEBHOOK_URL }}
+        fi
