@@ -7,7 +7,7 @@ aws_region  = "ap-northeast-1"
 environment = "production"
 
 # Network Configuration
-vpc_cidr = "10.10.0.0/16"  # Different from existing SuperInsight API VPC
+vpc_cidr = "10.1.0.0/24"  # Compact CIDR for cost optimization
 
 # Database Configuration
 db_instance_class    = "db.t3.medium"

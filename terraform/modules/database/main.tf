@@ -68,6 +68,7 @@ resource "aws_db_instance" "main" {
   vpc_security_group_ids = [var.security_group_id]
   publicly_accessible    = false
   port                   = 5432
+  multi_az              = false  # Single AZ for cost optimization
 
   # Backup
   backup_retention_period = var.backup_retention_period

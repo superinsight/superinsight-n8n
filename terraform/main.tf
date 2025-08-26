@@ -100,6 +100,10 @@ module "ecs" {
   ecs_security_group_id = module.security_groups.ecs_security_group_id
   alb_security_group_id = module.security_groups.alb_security_group_id
   
+  # IAM Roles
+  ecs_task_execution_role_arn = module.iam.ecs_task_execution_role_arn
+  ecs_task_role_arn          = module.iam.ecs_task_role_arn
+  
   # Database connection
   db_host     = module.database.db_endpoint
   db_name     = var.db_name
