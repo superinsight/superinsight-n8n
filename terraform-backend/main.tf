@@ -27,7 +27,7 @@ provider "aws" {
 
 # S3 Bucket for Terraform State
 resource "aws_s3_bucket" "terraform_state" {
-  bucket = "superinsight-terraform-state-prod"
+  bucket = "superinsight-terraform-state-465636789521"
 
   tags = {
     Name = "Terraform State Bucket"
