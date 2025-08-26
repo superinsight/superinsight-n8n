@@ -3,7 +3,7 @@
 # ============================================================================
 
 # General Configuration
-aws_region     = "ap-northeast-1"
+aws_region     = "us-west-2"
 environment    = "production"
 aws_account_id = "465636789521"
 

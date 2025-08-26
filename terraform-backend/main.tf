@@ -27,7 +27,7 @@ provider "aws" {
 
 # S3 Bucket for Terraform State
 resource "aws_s3_bucket" "terraform_state" {
-  bucket = "superinsight-terraform-state-465636789521"
+  bucket = "superinsight-terraform-state-465636789521-oregon"
 
   tags = {
     Name = "Terraform State Bucket"
@@ -81,7 +81,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "terraform_state" {
 
 # DynamoDB Table for State Locking
 resource "aws_dynamodb_table" "terraform_locks" {
-  name           = "superinsight-terraform-locks"
+  name           = "superinsight-terraform-locks-oregon"
   billing_mode   = "PAY_PER_REQUEST"
   hash_key       = "LockID"
 
