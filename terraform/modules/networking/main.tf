@@ -22,12 +22,12 @@ resource "aws_internet_gateway" "main" {
   })
 }
 
-# Public Subnets
+# Public Subnets - using /28 subnets for compact allocation
 resource "aws_subnet" "public" {
-  count = length(var.availability_zones)
+  count = min(2, length(var.availability_zones))
 
   vpc_id                  = aws_vpc.main.id
-  cidr_block              = cidrsubnet(var.vpc_cidr, 2, count.index)
+  cidr_block              = cidrsubnet(var.vpc_cidr, 4, count.index)
   availability_zone       = var.availability_zones[count.index]
   map_public_ip_on_launch = true
 
@@ -37,12 +37,12 @@ resource "aws_subnet" "public" {
   })
 }
 
-# Private Subnets (for ECS tasks)
+# Private Subnets (for ECS tasks) - using /28 subnets 
 resource "aws_subnet" "private" {
-  count = length(var.availability_zones)
+  count = min(2, length(var.availability_zones))
 
   vpc_id            = aws_vpc.main.id
-  cidr_block        = cidrsubnet(var.vpc_cidr, 2, count.index + 3)
+  cidr_block        = cidrsubnet(var.vpc_cidr, 4, count.index + 4)
   availability_zone = var.availability_zones[count.index]
 
   tags = merge(var.tags, {
@@ -51,12 +51,12 @@ resource "aws_subnet" "private" {
   })
 }
 
-# Database Subnets
+# Database Subnets - using /28 subnets
 resource "aws_subnet" "database" {
   count = min(2, length(var.availability_zones))
 
   vpc_id            = aws_vpc.main.id
-  cidr_block        = cidrsubnet(var.vpc_cidr, 2, count.index + 6)
+  cidr_block        = cidrsubnet(var.vpc_cidr, 4, count.index + 8)
   availability_zone = var.availability_zones[count.index]
 
   tags = merge(var.tags, {
@@ -65,9 +65,9 @@ resource "aws_subnet" "database" {
   })
 }
 
-# Elastic IPs for NAT Gateways
+# Elastic IPs for NAT Gateways - only create for public subnets we have
 resource "aws_eip" "nat" {
-  count = length(var.availability_zones)
+  count = min(2, length(var.availability_zones))
 
   domain     = "vpc"
   depends_on = [aws_internet_gateway.main]
@@ -77,9 +77,9 @@ resource "aws_eip" "nat" {
   })
 }
 
-# NAT Gateways
+# NAT Gateways - only create for public subnets we have
 resource "aws_nat_gateway" "main" {
-  count = length(var.availability_zones)
+  count = min(2, length(var.availability_zones))
 
   allocation_id = aws_eip.nat[count.index].id
   subnet_id     = aws_subnet.public[count.index].id

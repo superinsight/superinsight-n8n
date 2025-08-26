@@ -18,6 +18,12 @@ variable "environment" {
   default     = "production"
 }
 
+variable "aws_account_id" {
+  description = "AWS Account ID for resource tagging and validation"
+  type        = string
+  default     = "465636789521"
+}
+
 # ============================================================================
 # Network Configuration
 # ============================================================================
