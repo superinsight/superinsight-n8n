@@ -45,11 +45,11 @@ resource "aws_lb_target_group" "main" {
   health_check {
     enabled             = true
     healthy_threshold   = 2
-    unhealthy_threshold = 2
-    timeout             = 30
-    interval            = 60
-    path                = "/healthz"
-    matcher             = "200"
+    unhealthy_threshold = 10
+    timeout             = 60
+    interval            = 120
+    path                = "/"
+    matcher             = "200,302"
     port                = "traffic-port"
     protocol            = "HTTP"
   }
@@ -175,6 +175,18 @@ resource "aws_ecs_task_definition" "n8n" {
         {
           name  = "N8N_METRICS"
           value = "true"
+        },
+        {
+          name  = "DB_POSTGRESDB_POOL_SIZE"
+          value = "2"
+        },
+        {
+          name  = "N8N_LOG_LEVEL"
+          value = "warn"
+        },
+        {
+          name  = "EXECUTIONS_PROCESS"
+          value = "main"
         }
       ]
 
@@ -196,6 +208,17 @@ resource "aws_ecs_task_definition" "n8n" {
           "awslogs-region"        = data.aws_region.current.name
           "awslogs-stream-prefix" = "ecs"
         }
+      }
+
+      healthCheck = {
+        command = [
+          "CMD-SHELL",
+          "curl -f http://localhost:5678/ || exit 1"
+        ]
+        interval    = 30
+        timeout     = 5
+        retries     = 5
+        startPeriod = 120
       }
 
       essential = true
@@ -227,10 +250,19 @@ resource "aws_ecs_service" "n8n" {
     container_port   = 5678
   }
 
+  deployment_maximum_percent         = 200
+  deployment_minimum_healthy_percent = 50
+  
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
+  }
+
+  # Wait for at least one task to be healthy before considering deployment successful
+  wait_for_steady_state = true
+
   depends_on = [
-    aws_lb_listener.http,
-    aws_lb_listener.https,
-    aws_lb_listener.http_direct
+    aws_lb_listener.http
   ]
 
   tags = merge(var.tags, {

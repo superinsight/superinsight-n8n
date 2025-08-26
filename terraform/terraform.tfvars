@@ -20,7 +20,7 @@ db_username          = "n8n_admin"
 n8n_image         = "n8nio/n8n:latest"
 n8n_cpu           = 2048
 n8n_memory        = 4096
-n8n_desired_count = 2
+n8n_desired_count = 1
 
 # Domain Configuration (optional - update if you have a domain)
 # n8n_domain_name = "n8n.yourdomain.com"
