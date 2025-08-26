@@ -25,7 +25,7 @@ resource "aws_lb" "main" {
   internal           = false
   load_balancer_type = "application"
   security_groups    = [var.alb_security_group_id]
-  subnets           = var.public_subnet_ids
+  subnets            = var.public_subnet_ids
 
   enable_deletion_protection = false
 
@@ -36,10 +36,10 @@ resource "aws_lb" "main" {
 
 # Target Group
 resource "aws_lb_target_group" "main" {
-  name     = "${var.environment}-n8n-tg"
-  port     = 5678
-  protocol = "HTTP"
-  vpc_id   = var.vpc_id
+  name        = "${var.environment}-n8n-tg"
+  port        = 5678
+  protocol    = "HTTP"
+  vpc_id      = var.vpc_id
   target_type = "ip"
 
   health_check {
@@ -121,13 +121,13 @@ resource "aws_ecs_task_definition" "n8n" {
   cpu                      = var.n8n_cpu
   memory                   = var.n8n_memory
   execution_role_arn       = var.ecs_task_execution_role_arn
-  task_role_arn           = var.ecs_task_role_arn
+  task_role_arn            = var.ecs_task_role_arn
 
   container_definitions = jsonencode([
     {
       name  = "n8n"
       image = var.n8n_image
-      
+
       portMappings = [
         {
           containerPort = 5678
@@ -218,7 +218,7 @@ resource "aws_ecs_service" "n8n" {
   network_configuration {
     security_groups  = [var.ecs_security_group_id]
     subnets          = var.private_subnet_ids
-    assign_public_ip = true  # Required for Fargate tasks to pull images
+    assign_public_ip = true # Required for Fargate tasks to pull images
   }
 
   load_balancer {

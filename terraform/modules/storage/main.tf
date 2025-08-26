@@ -82,7 +82,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "backup" {
   rule {
     id     = "backup_lifecycle"
     status = "Enabled"
-    
+
     filter {
       prefix = ""
     }

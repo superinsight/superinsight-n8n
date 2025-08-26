@@ -3,23 +3,23 @@
 # ============================================================================
 
 # General Configuration
-aws_region  = "ap-northeast-1"
-environment = "production"
+aws_region     = "ap-northeast-1"
+environment    = "production"
 aws_account_id = "465636789521"
 
 # Network Configuration
-vpc_cidr = "10.1.0.0/24"  # Compact CIDR for cost optimization
+vpc_cidr = "10.1.0.0/24" # Compact CIDR for cost optimization
 
 # Database Configuration
 db_instance_class    = "db.t3.medium"
 db_allocated_storage = 50
-db_name             = "n8n_production"
-db_username         = "n8n_admin"
+db_name              = "n8n_production"
+db_username          = "n8n_admin"
 
 # n8n Application Configuration
-n8n_image        = "n8nio/n8n:latest"
-n8n_cpu          = 2048
-n8n_memory       = 4096
+n8n_image         = "n8nio/n8n:latest"
+n8n_cpu           = 2048
+n8n_memory        = 4096
 n8n_desired_count = 2
 
 # Domain Configuration (optional - update if you have a domain)

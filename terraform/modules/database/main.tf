@@ -55,8 +55,8 @@ resource "aws_db_instance" "main" {
   # Storage
   allocated_storage     = var.db_allocated_storage
   max_allocated_storage = var.db_allocated_storage * 2
-  storage_type         = "gp2"
-  storage_encrypted    = true
+  storage_type          = "gp2"
+  storage_encrypted     = true
 
   # Database
   db_name  = var.db_name
@@ -68,21 +68,21 @@ resource "aws_db_instance" "main" {
   vpc_security_group_ids = [var.security_group_id]
   publicly_accessible    = false
   port                   = 5432
-  multi_az              = false  # Single AZ for cost optimization
+  multi_az               = false # Single AZ for cost optimization
 
   # Backup
   backup_retention_period = var.backup_retention_period
-  backup_window          = "03:00-04:00"
-  maintenance_window     = "Sun:04:00-Sun:05:00"
-  
+  backup_window           = "03:00-04:00"
+  maintenance_window      = "Sun:04:00-Sun:05:00"
+
   # Monitoring
   performance_insights_enabled = true
-  monitoring_interval         = 60
-  monitoring_role_arn        = aws_iam_role.rds_monitoring.arn
+  monitoring_interval          = 60
+  monitoring_role_arn          = aws_iam_role.rds_monitoring.arn
 
   # Security
-  deletion_protection = var.enable_deletion_protection
-  skip_final_snapshot = false
+  deletion_protection       = var.enable_deletion_protection
+  skip_final_snapshot       = false
   final_snapshot_identifier = "${var.environment}-n8n-db-final-snapshot"
 
   # Parameters

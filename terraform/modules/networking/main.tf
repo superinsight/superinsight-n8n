@@ -69,7 +69,7 @@ resource "aws_subnet" "database" {
 resource "aws_eip" "nat" {
   count = length(var.availability_zones)
 
-  domain = "vpc"
+  domain     = "vpc"
   depends_on = [aws_internet_gateway.main]
 
   tags = merge(var.tags, {
@@ -166,7 +166,7 @@ resource "aws_db_subnet_group" "main" {
 resource "aws_vpc_endpoint" "s3" {
   vpc_id       = aws_vpc.main.id
   service_name = "com.amazonaws.${data.aws_region.current.name}.s3"
-  
+
   tags = merge(var.tags, {
     Name = "${var.environment}-n8n-s3-endpoint"
   })
