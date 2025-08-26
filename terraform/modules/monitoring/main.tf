@@ -73,9 +73,6 @@ resource "aws_cloudwatch_dashboard" "n8n" {
     ]
   })
 
-  tags = merge(var.tags, {
-    Name = "${var.environment}-n8n-dashboard"
-  })
 }
 
 # CloudWatch Alarms
