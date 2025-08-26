@@ -5,6 +5,7 @@
 # General Configuration
 aws_region  = "ap-northeast-1"
 environment = "production"
+aws_account_id = "465636789521"
 
 # Network Configuration
 vpc_cidr = "10.1.0.0/24"  # Compact CIDR for cost optimization
